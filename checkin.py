@@ -375,9 +375,21 @@ class API:
     def exchange(self, cookies: str, plan: str, required_points: int) -> str:
         """执行兑换"""
         url = self._get_full_url(self.EXCHANGE_URL)
-        response = self._make_request(url, "POST", {"planType": required_points}, cookies)
+        # 用 form 表单发送，字段名 planType
+        session_headers = self.headers.copy()
+        session_headers["cookie"] = cookies
+        try:
+            response = self.session.post(
+                url,
+                headers=session_headers,
+                data={"planType": plan},
+                timeout=(60, 120),
+            )
+        except requests.exceptions.RequestException as e:
+            self._log("error", LogEmoji.ERROR, f"兑换请求网络错误: {e}", force=True)
+            return "兑换失败"
 
-        if response:
+        if response.ok:
             data = response.json()
             code = data.get("code", -2)
             message = data.get("message", "未知错误")
@@ -389,7 +401,7 @@ class API:
                 self._log("info", LogEmoji.FAIL, f"{{ code : {code}, message : {message} }}", force=True)
                 return f"兑换失败: {message}"
         else:
-            self._log("warning", LogEmoji.WARNING, "兑换失败", force=True)
+            self._log("warning", LogEmoji.WARNING, f"兑换请求失败，状态码 {response.status_code}", force=True)
             return "兑换失败"
 
 
