@@ -585,7 +585,15 @@ class Checker:
                     if r["points_total"] != "None 积分":
                         lines.append(f"  💰 总积分: {r['points_total']}")
                     if r["exchange"]:
-                        lines.append(f"  🎁 {r['exchange']}")
+                        # 翻译积分不足的英文提示
+                        exchange_msg = r["exchange"]
+                        import re
+                        m = re.search(r"Not enough points\. Need (\d+), have ([\d.]+)", exchange_msg)
+                        if m:
+                            need, have = m.group(1), m.group(2).split(".")[0]
+                            lines.append(f"  🎁 兑换失败: 积分不足（需要{need}，当前{have}）")
+                        else:
+                            lines.append(f"  🎁 {exchange_msg}")
                 else:
                     error_msg = r.get("message", "") or "未知原因"
                     lines.append(f"  {emoji} {status_text}: {error_msg}")
