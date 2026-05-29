@@ -428,6 +428,7 @@ class PushService:
 
         try:
             req = requests.Request(
+                "POST",
                 self.WXPUSHER_API,
                 data=payload,
                 headers={"Content-Type": "application/json"},
