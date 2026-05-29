@@ -95,7 +95,8 @@ class Config:
 
     ENV_WX_APP_TOKEN = "WX_APP_TOKEN"
     ENV_WX_UIDS = "WX_UIDS"
-    ENV_COOKIES = "GLADOS_COOKIES"
+    ENV_GLADOS_COOKIES = "GLADOS_COOKIES"
+    ENV_RAILGUN_COOKIES = "RAILGUN_COOKIES"
     ENV_EXCHANGE_PLAN = "GLADOS_EXCHANGE_PLAN"
     ENV_VERBOSE = "GLADOS_VERBOSE"
 
@@ -105,7 +106,7 @@ class Config:
     """默认是否输出详细响应"""
     DEFAULT_VERBOSE = False
 
-    """默认域名"""
+    """域名配置"""
     DOMAINS = ["glados.cloud", "railgun.info"]
 
     """兑换计划列表"""
@@ -118,16 +119,20 @@ class Config:
     def __init__(self):
         self.wx_app_token: str = ""
         self.wx_uids: str = ""
-        self.cookies_list: List[str] = []
+        self.domain_cookies: Dict[str, List[str]] = {}
         self.exchange_plan: str = self.DEFAULT_EXCHANGE_PLAN
         self.verbose: bool = self.DEFAULT_VERBOSE
         self._load_config()
+
+    @staticmethod
+    def _parse_cookies(raw: str) -> List[str]:
+        """将 & 分隔的 cookie 字符串解析为列表"""
+        return [c.strip() for c in raw.split("&") if c.strip()]
 
     def _load_config(self) -> None:
         """加载配置"""
         wx_app_token_env: Optional[str] = os.environ.get(self.ENV_WX_APP_TOKEN)
         wx_uids_env: Optional[str] = os.environ.get(self.ENV_WX_UIDS)
-        raw_cookies_env: Optional[str] = os.environ.get(self.ENV_COOKIES)
         exchange_plan_env: Optional[str] = os.environ.get(self.ENV_EXCHANGE_PLAN)
         verbose_env: Optional[str] = os.environ.get(self.ENV_VERBOSE)
 
@@ -143,13 +148,21 @@ class Config:
         else:
             self.wx_uids = wx_uids_env
 
-        if not raw_cookies_env:
-            logger.warning(f"{LogEmoji.WARNING} 环境变量 '{self.ENV_COOKIES}' 未设置。")
-            self.cookies_list = []
-        else:
-            self.cookies_list = [cookie.strip() for cookie in raw_cookies_env.split("&") if cookie.strip()]
-            if not self.cookies_list:
-                raise ValueError(f"环境变量 '{self.ENV_COOKIES}' 已设置，但未包含任何有效的 Cookie。")
+        # 按域名加载 Cookie
+        glados_raw = os.environ.get(self.ENV_GLADOS_COOKIES, "")
+        railgun_raw = os.environ.get(self.ENV_RAILGUN_COOKIES, "")
+        if glados_raw:
+            self.domain_cookies["glados.cloud"] = self._parse_cookies(glados_raw)
+        if railgun_raw:
+            self.domain_cookies["railgun.info"] = self._parse_cookies(railgun_raw)
+
+        for domain in self.DOMAINS:
+            count = len(self.domain_cookies.get(domain, []))
+            logger.info(f"{LogEmoji.INFO} {domain}: 加载了 {count} 个 Cookie。")
+
+        total = sum(len(c) for c in self.domain_cookies.values())
+        if total == 0:
+            logger.warning(f"{LogEmoji.WARNING} 未找到任何有效的 Cookie。")
 
         if not exchange_plan_env:
             logger.warning(f"{LogEmoji.WARNING} 环境变量 '{self.ENV_EXCHANGE_PLAN}' 未设置，将使用默认兑换计划 {self.DEFAULT_EXCHANGE_PLAN}。")
@@ -162,7 +175,6 @@ class Config:
                 logger.warning(f"{LogEmoji.WARNING} 环境变量 '{self.ENV_EXCHANGE_PLAN}' 的值 '{exchange_plan_env}' 无效，将使用默认兑换计划 {self.DEFAULT_EXCHANGE_PLAN}。")
                 self.exchange_plan = self.DEFAULT_EXCHANGE_PLAN
 
-        logger.info(f"{LogEmoji.INFO} 共加载了 {len(self.cookies_list)} 个 Cookie 用于签到。")
         logger.info(f"{LogEmoji.INFO} 当前 {self.ENV_WX_APP_TOKEN} {'已设置' if wx_app_token_env else '未设置'}。")
         logger.info(f"{LogEmoji.INFO} 当前 {self.ENV_WX_UIDS} {'已设置' if wx_uids_env else '未设置'}。")
         logger.info(f"{LogEmoji.INFO} 当前 {self.ENV_EXCHANGE_PLAN}: {self.exchange_plan}。")
@@ -451,29 +463,25 @@ class Checker:
 
     def __init__(self, config: Config):
         self.config = config
-        self.results = []
+        self.results: List[CheckinResult] = []
 
     def _log(self, cookie_idx: int, domain: str, emoji: str, message: str, force: bool = False) -> None:
         """统一日志输出方法"""
-
         if self.config.verbose or force:
             logger.info(f"{LogEmoji.COOKIE}[{cookie_idx}] {LogEmoji.DOMAIN}[{domain}] {emoji} {message}")
 
     def checkin_all(self):
-        """执行所有签到任务"""
-        cookie_count = len(self.config.cookies_list)
-        domain_count = len(self.config.DOMAINS)
-        total_tasks = cookie_count * domain_count
-        task_idx = 0
+        """按域名逐个签到"""
+        for domain in self.config.DOMAINS:
+            cookies = self.config.domain_cookies.get(domain, [])
+            if not cookies:
+                logger.warning(f"{LogEmoji.WARNING} {domain}: 无可用 Cookie，跳过。")
+                continue
 
-        logger.info(f"{LogEmoji.INFO} 共 {cookie_count} 个 Cookie, {domain_count} 个域名, 共 {total_tasks} 个任务")
+            logger.info(f"{LogEmoji.START} ========== {domain} 共 {len(cookies)} 个 Cookie ==========")
 
-        for cookie_idx, cookie in enumerate(self.config.cookies_list, 1):
-            logger.info(f"{LogEmoji.START} ========== 开始处理 Cookie {cookie_idx} ==========")
-
-            for domain in self.config.DOMAINS:
-                task_idx += 1
-                logger.info(f"{LogEmoji.INFO} ----- 任务 {task_idx}/{total_tasks}: {LogEmoji.COOKIE}[{cookie_idx}] on {LogEmoji.DOMAIN}[{domain}] -----")
+            for cookie_idx, cookie in enumerate(cookies, 1):
+                logger.info(f"{LogEmoji.INFO} ----- {LogEmoji.DOMAIN}[{domain}] Cookie {cookie_idx} -----")
 
                 result = self._checkin_on_domain(cookie, cookie_idx, domain)
                 self.results.append(result)
@@ -523,29 +531,59 @@ class Checker:
         return [result.to_dict() for result in self.results]
 
     def format_results(self) -> Tuple[str, str, str]:
-        """格式化结果"""
+        """格式化结果（按域名分组展示）"""
         results = self.get_results()
 
+        STATUS_EMOJI = {
+            CheckinStatus.SUCCESS: "✅",
+            CheckinStatus.REPEAT: "🔄",
+            CheckinStatus.FAILURE: "❌",
+        }
+
+        # 按域名分组
+        domain_results: Dict[str, List[Dict]] = {}
+        for r in results:
+            domain = r["domain"]
+            domain_results.setdefault(domain, []).append(r)
+
+        # 统计
+        total = len(results)
         success_count = sum(1 for r in results if r["code"] == CheckinStatus.SUCCESS)
         repeat_count = sum(1 for r in results if r["code"] == CheckinStatus.REPEAT)
         fail_count = sum(1 for r in results if r["code"] == CheckinStatus.FAILURE)
 
-        title = f"GLaDOS 签到, 成功{success_count}, 失败{fail_count}, 重复{repeat_count}"
+        title = f"GLaDOS 签到完成 ✅{success_count} 🔄{repeat_count} ❌{fail_count}"
 
-        send_content_lines = []
-        log_content_lines = []
-        for i, res in enumerate(results, 1):
-            line = f"#{i} P:{res['points']} 剩余:{res['days']} 总积分:{res['points_total']} | {res['status']} | {res['exchange']}"
-            send_content_lines.append(line)
+        lines = []
+        log_lines = []
 
-            if self.config.verbose:
-                log_line = line
-            else:
-                log_line = f"#{i} {res['status']}"
-            log_content_lines.append(log_line)
+        for domain, domain_res_list in domain_results.items():
+            lines.append(f"【{domain}】")
+            log_lines.append(f"【{domain}】")
 
-        content = "\n".join(send_content_lines)
-        log_content = "\n".join(log_content_lines)
+            for i, r in enumerate(domain_res_list, 1):
+                emoji = STATUS_EMOJI.get(r["code"], "")
+                status_text = r["status"]
+
+                # 详细内容
+                if r["code"] in (CheckinStatus.SUCCESS, CheckinStatus.REPEAT):
+                    lines.append(f"  {emoji} 状态: {status_text}")
+                    if r["days"] != "None 天":
+                        lines.append(f"  📅 剩余天数: {r['days']}")
+                    if r["points_total"] != "None 积分":
+                        lines.append(f"  💰 总积分: {r['points_total']}")
+                    if r["exchange"]:
+                        lines.append(f"  🎁 {r['exchange']}")
+                else:
+                    error_msg = r.get("message", "") or "未知原因"
+                    lines.append(f"  {emoji} {status_text}: {error_msg}")
+
+                lines.append("")  # 空行分隔
+
+                log_lines.append(f"  {emoji} {status_text}")
+
+        content = "\n".join(lines).strip()
+        log_content = "\n".join(log_lines).strip()
         return title, content, log_content
 
 
@@ -560,7 +598,7 @@ def main():
         logger.info(f"{LogEmoji.START} 步骤 1: 加载配置")
         config = Config()
 
-        if not config.cookies_list:
+        if not config.domain_cookies:
             logger.error(f"{LogEmoji.ERROR} 未找到有效的 Cookie, 退出程序。")
             title, content = "# 未找到 cookies!", ""
         else:

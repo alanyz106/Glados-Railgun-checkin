@@ -50,6 +50,7 @@ jobs:
         WX_APP_TOKEN: ${{ secrets.WXPUSHER_APP_TOKEN }}
         WX_UIDS: ${{ secrets.WXPUSHER_UIDS }}
         GLADOS_COOKIES: ${{ secrets.GLADOS_COOKIES }}
+        RAILGUN_COOKIES: ${{ secrets.RAILGUN_COOKIES }}
         GLADOS_EXCHANGE_PLAN: ${{ secrets.GLADOS_EXCHANGE_PLAN }}
         GLADOS_VERBOSE: ${{ secrets.GLADOS_VERBOSE }}
 
