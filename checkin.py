@@ -375,7 +375,7 @@ class API:
     def exchange(self, cookies: str, plan: str, required_points: int) -> str:
         """执行兑换"""
         url = self._get_full_url(self.EXCHANGE_URL)
-        response = self._make_request(url, "POST", {"planType": plan}, cookies)
+        response = self._make_request(url, "POST", {"planType": required_points}, cookies)
 
         if response:
             data = response.json()
@@ -384,7 +384,7 @@ class API:
 
             if code == 0:
                 self._log("info", LogEmoji.SUCCESS, f"{{ code : {code}, message : {message} }}")
-                return f"兑换成功: {plan}"
+                return f"兑换成功: {required_points}积分兑换100天"
             else:
                 self._log("info", LogEmoji.FAIL, f"{{ code : {code}, message : {message} }}", force=True)
                 return f"兑换失败: {message}"
