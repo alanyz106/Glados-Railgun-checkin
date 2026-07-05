@@ -98,10 +98,14 @@ class Config:
     ENV_GLADOS_COOKIES = "GLADOS_COOKIES"
     ENV_RAILGUN_COOKIES = "RAILGUN_COOKIES"
     ENV_EXCHANGE_PLAN = "GLADOS_EXCHANGE_PLAN"
+    ENV_AUTO_EXCHANGE = "GLADOS_AUTO_EXCHANGE"
     ENV_VERBOSE = "GLADOS_VERBOSE"
 
     """默认兑换计划"""
     DEFAULT_EXCHANGE_PLAN = "plan500"
+
+    """配置文件路径"""
+    CONFIG_FILE = "config.json"
 
     """默认是否输出详细响应"""
     DEFAULT_VERBOSE = False
@@ -121,8 +125,10 @@ class Config:
         self.wx_uids: str = ""
         self.domain_cookies: Dict[str, List[str]] = {}
         self.exchange_plan: str = self.DEFAULT_EXCHANGE_PLAN
+        self.auto_exchange: bool = False
         self.verbose: bool = self.DEFAULT_VERBOSE
         self._load_config()
+        self._load_config_file()
 
     @staticmethod
     def _parse_cookies(raw: str) -> List[str]:
@@ -134,6 +140,7 @@ class Config:
         wx_app_token_env: Optional[str] = os.environ.get(self.ENV_WX_APP_TOKEN)
         wx_uids_env: Optional[str] = os.environ.get(self.ENV_WX_UIDS)
         exchange_plan_env: Optional[str] = os.environ.get(self.ENV_EXCHANGE_PLAN)
+        auto_exchange_env: Optional[str] = os.environ.get(self.ENV_AUTO_EXCHANGE)
         verbose_env: Optional[str] = os.environ.get(self.ENV_VERBOSE)
 
         if not wx_app_token_env:
@@ -179,6 +186,17 @@ class Config:
         logger.info(f"{LogEmoji.INFO} 当前 {self.ENV_WX_UIDS} {'已设置' if wx_uids_env else '未设置'}。")
         logger.info(f"{LogEmoji.INFO} 当前 {self.ENV_EXCHANGE_PLAN}: {self.exchange_plan}。")
 
+        if auto_exchange_env is not None:
+            auto_exchange_env_lower = auto_exchange_env.lower()
+            if auto_exchange_env_lower in ["true", "1", "yes", "y"]:
+                self.auto_exchange = True
+            elif auto_exchange_env_lower in ["false", "0", "no", "n"]:
+                self.auto_exchange = False
+            else:
+                logger.warning(f"{LogEmoji.WARNING} 环境变量 '{self.ENV_AUTO_EXCHANGE}' 的值 '{auto_exchange_env}' 无效，使用配置文件或默认值。")
+
+        logger.info(f"{LogEmoji.INFO} 当前 {self.ENV_AUTO_EXCHANGE}: {self.auto_exchange}。")
+
         if verbose_env is not None:
             verbose_env_lower = verbose_env.lower()
             if verbose_env_lower in ["true", "1", "yes", "y"]:
@@ -189,6 +207,33 @@ class Config:
                 logger.warning(f"{LogEmoji.WARNING} 环境变量 '{self.ENV_VERBOSE}' 的值 '{verbose_env}' 无效，将使用默认值 {self.DEFAULT_VERBOSE}。")
 
         logger.info(f"{LogEmoji.INFO} 当前 {self.ENV_VERBOSE}: {self.verbose}。")
+
+    def _load_config_file(self) -> None:
+        """从配置文件加载配置（文件配置优先于环境变量）"""
+        if not os.path.exists(self.CONFIG_FILE):
+            logger.info(f"{LogEmoji.INFO} 配置文件 '{self.CONFIG_FILE}' 不存在，使用默认配置。")
+            return
+
+        try:
+            with open(self.CONFIG_FILE, "r", encoding="utf-8") as f:
+                file_config = json.load(f)
+
+            # auto_exchange: 默认 False
+            auto_exchange = file_config.get("auto_exchange", False)
+            if isinstance(auto_exchange, bool):
+                self.auto_exchange = auto_exchange
+            logger.info(f"{LogEmoji.INFO} 配置文件: auto_exchange={self.auto_exchange}")
+
+            # exchange_plan: 配置文件优先于环境变量
+            exchange_plan = file_config.get("exchange_plan")
+            if exchange_plan and exchange_plan in self.EXCHANGE_PLANS:
+                self.exchange_plan = exchange_plan
+                logger.info(f"{LogEmoji.SUCCESS} 配置文件指定兑换计划: {self.exchange_plan}")
+            elif exchange_plan:
+                logger.warning(f"{LogEmoji.WARNING} 配置文件中 exchange_plan='{exchange_plan}' 无效，保持当前值: {self.exchange_plan}")
+
+        except (json.JSONDecodeError, IOError) as e:
+            logger.warning(f"{LogEmoji.WARNING} 读取配置文件失败: {e}")
 
 
 class API:
@@ -526,15 +571,19 @@ class Checker:
             points_str, points_num = api.get_points(cookie)
             result.points_total = points_str
 
-            # 4. 执行兑换
-            required_points = self.config.EXCHANGE_PLANS.get(self.config.exchange_plan, 500)
-            self._log(
-                cookie_idx,
-                domain,
-                LogEmoji.EXCHANGE,
-                f"开始兑换 {self.config.exchange_plan} (需要 {required_points} 积分)",
-            )
-            result.exchange = api.exchange(cookie, self.config.exchange_plan, required_points)
+            # 4. 执行兑换（根据配置决定是否自动兑换）
+            if self.config.auto_exchange:
+                required_points = self.config.EXCHANGE_PLANS.get(self.config.exchange_plan, 500)
+                self._log(
+                    cookie_idx,
+                    domain,
+                    LogEmoji.EXCHANGE,
+                    f"开始兑换 {self.config.exchange_plan} (需要 {required_points} 积分)",
+                )
+                result.exchange = api.exchange(cookie, self.config.exchange_plan, required_points)
+            else:
+                self._log(cookie_idx, domain, LogEmoji.INFO, "自动兑换已关闭，跳过兑换")
+                result.exchange = "未兑换"
 
         return result
 

@@ -52,6 +52,7 @@ jobs:
         GLADOS_COOKIES: ${{ secrets.GLADOS_COOKIES }}
         RAILGUN_COOKIES: ${{ secrets.RAILGUN_COOKIES }}
         GLADOS_EXCHANGE_PLAN: ${{ secrets.GLADOS_EXCHANGE_PLAN }}
+        GLADOS_AUTO_EXCHANGE: ${{ secrets.GLADOS_AUTO_EXCHANGE }}
         GLADOS_VERBOSE: ${{ secrets.GLADOS_VERBOSE }}
 
     - name: Keep alive
