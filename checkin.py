@@ -96,7 +96,6 @@ class Config:
     ENV_WX_APP_TOKEN = "WX_APP_TOKEN"
     ENV_WX_UIDS = "WX_UIDS"
     ENV_GLADOS_COOKIES = "GLADOS_COOKIES"
-    ENV_RAILGUN_COOKIES = "RAILGUN_COOKIES"
     ENV_EXCHANGE_PLAN = "GLADOS_EXCHANGE_PLAN"
     ENV_AUTO_EXCHANGE = "GLADOS_AUTO_EXCHANGE"
     ENV_VERBOSE = "GLADOS_VERBOSE"
@@ -110,8 +109,11 @@ class Config:
     """默认是否输出详细响应"""
     DEFAULT_VERBOSE = False
 
+    """最多支持的账号数（每个账号一个独立环境变量 GLADOS_COOKIES, GLADOS_COOKIES_2, ...）"""
+    MAX_ACCOUNTS = 5
+
     """域名配置"""
-    DOMAINS = ["glados.cloud", "railgun.info"]
+    DOMAINS = ["glados.cloud"]
 
     """兑换计划列表"""
     EXCHANGE_PLANS = {
@@ -155,13 +157,14 @@ class Config:
         else:
             self.wx_uids = wx_uids_env
 
-        # 按域名加载 Cookie
-        glados_raw = os.environ.get(self.ENV_GLADOS_COOKIES, "")
-        railgun_raw = os.environ.get(self.ENV_RAILGUN_COOKIES, "")
-        if glados_raw:
-            self.domain_cookies["glados.cloud"] = self._parse_cookies(glados_raw)
-        if railgun_raw:
-            self.domain_cookies["railgun.info"] = self._parse_cookies(railgun_raw)
+        # 按域名加载 Cookie：每个账号一个独立环境变量（GLADOS_COOKIES, GLADOS_COOKIES_2, ...）
+        self.domain_cookies["glados.cloud"] = []
+        for i in range(1, Config.MAX_ACCOUNTS + 1):
+            env_name = self.ENV_GLADOS_COOKIES if i == 1 else f"{self.ENV_GLADOS_COOKIES}_{i}"
+            raw = os.environ.get(env_name, "").strip()
+            if raw:
+                # 兼容旧的 & 分隔多账号格式
+                self.domain_cookies["glados.cloud"].extend(self._parse_cookies(raw))
 
         for domain in self.DOMAINS:
             count = len(self.domain_cookies.get(domain, []))

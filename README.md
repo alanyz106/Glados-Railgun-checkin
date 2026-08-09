@@ -28,7 +28,7 @@
 
 ![图片加载失败](imgs/3.png)
 
-- 多账号请在 `COOKIES` 中 添加多个 `cookies` 中间使用 `&`连接即可。（例如： `c1&c3&c3...`）
+- 多账号请再添加独立的 `repository secret`，命名为 `GLADOS_COOKIES_2`、`GLADOS_COOKIES_3`…（依次递增），每个 secret 对应一个账号的 cookie，无需拼接。当前最多支持 5 个账号（`GLADOS_COOKIES` 到 `GLADOS_COOKIES_5`）。
 
 3. 配置积分兑换策略（非必须）
 
@@ -63,7 +63,9 @@
 ## 更新日志
 
 - **2026-01**: 重构代码，添加log输出方便定位，支持新版网址，支持配置积分兑换策略。
-- **2026-04**: 优化代码逻辑，优化日志输出，支持[新版域名](https://railgun.info) ，在 GLADOS_COOKIES 中添加新版域名下的 cookies 即可使用。
+- **2026-04**: 优化代码逻辑，优化日志输出，支持新版域名，在 GLADOS_COOKIES 中添加新版域名下的 cookies 即可使用。
+- **2026-08**: 移除 railgun.info 域名支持，仅保留 glados.cloud 签到。
+- **2026-08**: 多账号改为每个账号一个独立 secret（`GLADOS_COOKIES_2`、`GLADOS_COOKIES_3`…），不再使用 `&` 拼接。
 
 
 ## 问题排查与定位
