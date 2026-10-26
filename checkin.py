@@ -277,11 +277,15 @@ class API:
         return False
 
     def _get_headers(self) -> Dict[str, str]:
-        """获取请求头"""
-        return {
-            "origin": f"https://{self.domain}",
-            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36",
-        }
+        """获取请求头
+
+        GLaDOS 服务端会把请求 UA 解析成设备指纹，并与登录时登记的设备比对，
+        不一致时签到接口返回 code=4 device-mismatch
+        （"Automated check-in detected. Please sign in again to continue."）。
+        因此这里不伪装浏览器 UA，保持 requests 默认 UA——
+        服务端无法解析出设备类型时会跳过该校验。
+        """
+        return {}
 
     def _log(self, level: str, emoji: str, message: str, force: bool = False) -> None:
         """统一日志输出方法"""
@@ -359,7 +363,12 @@ class API:
                 result["points"] = "0"
                 result["message"] = message
             else:
-                self._log("info", LogEmoji.FAIL, f"{{ code : {code}, message : {message} }}", force=True)
+                # code=4 表示设备指纹与登录设备不匹配（如 Cookie 有效但 UA 被伪装成浏览器）
+                reason = data.get("reason", "")
+                hint = ""
+                if reason == "device-mismatch":
+                    hint = "（设备指纹不匹配：Cookie 未过期，但请求 UA 被识别成了与登录设备不同的系统，请勿伪装浏览器 UA）"
+                self._log("info", LogEmoji.FAIL, f"{{ code : {code}, reason : {reason}, message : {message} }}{hint}", force=True)
                 result["code"] = CheckinStatus.FAILURE
                 result["status"] = "签到失败"
                 result["points"] = "0"

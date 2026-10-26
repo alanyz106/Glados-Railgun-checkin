@@ -28,3 +28,6 @@ config.json
 build/
 dist/
 *.egg-info/
+
+# Playwright 浏览器调试产物
+.playwright-cli/
